@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Image Sorter & Zipper</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+      /* --- Styles remain unchanged --- */
+      body {
+        font-family: "Inter", sans-serif;
+      }
+      .image-item {
+        position: relative;
+        border-radius: 0.5rem;
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1),
+          0 2px 4px -2px rgb(0 0 0 / 0.1);
+        overflow: hidden;
+        cursor: grab;
+        break-inside: avoid-column;
+        background-color: #e5e7eb;
+      }
+      .image-item.aspect-square {
+        aspect-ratio: 1 / 1;
+      }
+      .image-item:active {
+        cursor: grabbing;
+      }
+      .image-overlay-bottom {
+        position: absolute;
+        bottom: 0.5rem;
+        left: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        z-index: 10;
+        pointer-events: none;
+      }
+      .image-index {
+        background-color: rgba(0, 0, 0, 0.7);
+        color: white;
+        font-size: 0.75rem;
+        font-weight: bold;
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+        transition: background-color 0.2s, color 0.2s;
+      }
+      .image-index-duplicate {
+        background-color: #fef08a;
+        color: #dc2626 !important;
+      }
+      .duplicate-tag {
+        background-color: #fef08a;
+        color: #dc2626;
+        font-size: 0.65rem;
+        font-weight: bold;
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+        text-transform: uppercase;
+      }
+      .remove-button {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        background-color: rgba(0, 0, 0, 0.6);
+        color: white;
+        border: none;
+        border-radius: 9999px;
+        width: 1.5rem;
+        height: 1.5rem;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+        z-index: 11;
+        transition: background-color 0.2s ease;
+        pointer-events: auto;
+      }
+      .remove-button:hover {
+        background-color: rgba(220, 38, 38, 0.8);
+      }
+      .remove-button svg {
+        width: 0.875rem;
+        height: 0.875rem;
+        stroke-width: 2.5;
+      }
+      .image-item img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        border-radius: 0.5rem;
+      }
+      .image-item.aspect-square img {
+        object-fit: cover;
+      }
+      body.drop-zone-active {
+        outline: 3px dashed #3b82f6;
+        outline-offset: -3px;
+      }
+      .sortable-ghost {
+        opacity: 0.4;
+        background-color: #93c5fd;
+        border-radius: 0.5rem;
+      }
+      .sortable-chosen {
+        transform: scale(1.02);
+        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1),
+          0 4px 6px -4px rgb(0 0 0 / 0.1);
+      }
+      footer {
+        position: sticky;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 50;
+      }
+      #footer-drop-zone {
+        border: 2px dashed #4b5563;
+        padding: 1rem;
+        margin-top: 1rem;
+        text-align: center;
+        color: #d1d5db;
+        border-radius: 0.375rem;
+        transition: background-color 0.2s ease, border-color 0.2s ease;
+      }
+      #footer-drop-zone.footer-drop-zone-active {
+        background-color: rgba(59, 130, 246, 0.2);
+        border-color: #3b82f6;
+        color: #eff6ff;
+      }
+      #file-input {
+        display: none;
+      }
+      #message-box {
+        position: fixed;
+        top: 1rem;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 100;
+        transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+        opacity: 0;
+        pointer-events: none;
+      }
+      #message-box.show {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+      #message-box.hide {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-20px);
+      }
+      .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 44px;
+        height: 24px;
+      }
+      .toggle-switch input {
+        display: none;
+      }
+      .toggle-switch input:disabled + .toggle-slider {
+        cursor: not-allowed;
+        background-color: #9ca3af;
+      }
+      .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: 0.4s;
+        border-radius: 24px;
+      }
+      .toggle-slider:before {
+        position: absolute;
+        content: "";
+        height: 18px;
+        width: 18px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: 0.4s;
+        border-radius: 50%;
+      }
+      input:checked + .toggle-slider {
+        background-color: #2563eb;
+      }
+      input:checked + .toggle-slider:before {
+        transform: translateX(20px);
+      }
+      .download-link-button {
+        display: inline-block;
+        background-color: #3b82f6;
+        color: white;
+        font-weight: bold;
+        padding: 0.5rem 1rem;
+        border-radius: 0.25rem;
+        text-decoration: none;
+        transition: background-color 0.2s ease;
+      }
+      .download-link-button:hover {
+        background-color: #1d4ed8;
+      }
+      .prompt-button {
+        background-color: rgba(0, 0, 0, 0.7);
+        color: #a5b4fc;
+        border: 1px solid transparent;
+        border-radius: 0.25rem;
+        width: 1.25rem;
+        height: 1.25rem;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+        z-index: 10;
+        pointer-events: auto;
+        transition: background-color 0.2s, color 0.2s;
+      }
+      .prompt-button:hover {
+        background-color: rgba(50, 50, 50, 0.8);
+      }
+      .prompt-button.has-prompt {
+        color: #6ee7b7;
+      }
+      .prompt-button svg {
+        width: 0.75rem;
+        height: 0.75rem;
+        stroke-width: 2;
+      }
+      .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0.6);
+        z-index: 199;
+      }
+      #prompt-modal {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: white;
+        padding: 1.5rem;
+        border-radius: 0.5rem;
+        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1),
+          0 4px 6px -4px rgb(0 0 0 / 0.1);
+        z-index: 200;
+        width: 90%;
+        max-width: 500px;
+        color: #1f2937;
+      }
+      #prompt-modal h3 {
+        margin-bottom: 1rem;
+        font-size: 1.125rem;
+        font-weight: 600;
+      }
+      #prompt-textarea {
+        width: 100%;
+        min-height: 100px;
+        border: 1px solid #d1d5db;
+        border-radius: 0.375rem;
+        padding: 0.5rem;
+        margin-bottom: 1rem;
+        font-size: 0.875rem;
+        resize: vertical;
+      }
+      .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+      }
+    </style>
+  </head>
+  <body class="bg-gray-100 min-h-screen flex flex-col">
+    <input type="file" id="file-input" multiple accept=".jpg,.jpeg,.png" />
+
+    <main class="flex-grow p-4 md:p-8">
+      <div
+        id="drop-instructions"
+        class="text-center p-10 border-2 border-dashed border-gray-300 rounded-lg mb-8 bg-white cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors duration-200"
+      >
+        <p class="text-gray-600">
+          Drag & drop JPG or PNG images here or click to select files.
+        </p>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-12 w-12 mx-auto text-gray-400 mt-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="1"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+          />
+        </svg>
+      </div>
+
+      <div
+        id="image-grid"
+        class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 items-start"
+      ></div>
+    </main>
+
+    <footer class="bg-gray-800 text-white p-4 shadow-inner mt-auto">
+      <div class="container mx-auto flex flex-col">
+        <div
+          class="flex flex-wrap justify-between items-center gap-x-6 gap-y-3 w-full"
+        >
+          <div>
+            <span>Total Images: </span>
+            <span id="image-count" class="font-bold">0</span>
+          </div>
+
+          <div class="flex items-center gap-2 text-sm">
+            <span>Original Ratio</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="aspect-toggle" />
+              <span class="toggle-slider"></span>
+            </label>
+            <span>Square Grid</span>
+          </div>
+
+          <div class="flex items-center gap-2 text-sm">
+            <label class="toggle-switch">
+              <input type="checkbox" id="hide-empty-prompt-toggle" disabled />
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="whitespace-nowrap">Hide images without prompt</span>
+          </div>
+
+          <div
+            class="flex gap-2 items-center order-first sm:order-last ml-auto sm:ml-0"
+          >
+            <button
+              id="generate-button"
+              class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled
+            >
+              Generate ZIP
+            </button>
+            <div id="download-link-placeholder"></div>
+          </div>
+        </div>
+        <div id="footer-drop-zone" class="w-full">
+          Drop more JPG/PNG images here
+        </div>
+      </div>
+    </footer>
+
+    <div id="modal-overlay" class="modal-overlay hidden"></div>
+    <div id="prompt-modal" class="hidden">
+      <h3 id="modal-title">Edit Prompt for Image #</h3>
+      <textarea
+        id="prompt-textarea"
+        placeholder="Enter prompt here..."
+      ></textarea>
+      <div class="modal-actions">
+        <button
+          id="cancel-prompt-button"
+          class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
+        >
+          Cancel
+        </button>
+        <button
+          id="save-prompt-button"
+          class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+        >
+          Save Prompt
+        </button>
+      </div>
+    </div>
+
+    <div
+      id="message-box"
+      class="bg-red-500 text-white p-3 rounded-md shadow-md"
+    >
+      <span id="message-text"></span>
+    </div>
+
+    <script>
+      // --- Configuration ---
+      const ACCEPTED_FILE_EXTENSIONS = ["jpg", "jpeg", "png"];
+      const FILENAME_PADDING = 3;
+
+      // --- DOM Elements ---
+      const fileInput = document.getElementById("file-input");
+      const imageGrid = document.getElementById("image-grid");
+      const imageCountSpan = document.getElementById("image-count");
+      const generateButton = document.getElementById("generate-button");
+      const downloadLinkPlaceholder = document.getElementById(
+        "download-link-placeholder"
+      );
+      const dropInstructions = document.getElementById("drop-instructions");
+      const body = document.body;
+      const messageBox = document.getElementById("message-box");
+      const messageText = document.getElementById("message-text");
+      const aspectToggle = document.getElementById("aspect-toggle");
+      const footerDropZone = document.getElementById("footer-drop-zone");
+      const hideEmptyPromptToggle = document.getElementById(
+        "hide-empty-prompt-toggle"
+      );
+      // Modal elements
+      const modalOverlay = document.getElementById("modal-overlay");
+      const promptModal = document.getElementById("prompt-modal");
+      const modalTitle = document.getElementById("modal-title");
+      const promptTextarea = document.getElementById("prompt-textarea");
+      const savePromptButton = document.getElementById("save-prompt-button");
+      const cancelPromptButton = document.getElementById(
+        "cancel-prompt-button"
+      );
+
+      // --- State ---
+      let images = []; // Array: { id: number, file: File, dataURL: string, isDuplicate: boolean, prompt: string }
+      let nextId = 0;
+      let sortableInstance = null; // Holds the Sortable instance
+      let useSquareGrid = false;
+      let hideImagesWithoutPrompt = false;
+      let currentEditingImageId = null;
+
+      // --- Utility Functions ---
+      function showMessage(text, type = "error") {
+        /* ... no change ... */
+        messageText.textContent = text;
+        messageBox.classList.remove("bg-red-500", "bg-green-500");
+        messageBox.classList.add(
+          type === "success" ? "bg-green-500" : "bg-red-500"
+        );
+        messageBox.classList.remove("hide");
+        messageBox.classList.add("show");
+        setTimeout(() => {
+          messageBox.classList.remove("show");
+          messageBox.classList.add("hide");
+        }, 3000);
+      }
+      function getFileExtension(filename) {
+        /* ... no change ... */
+        return filename
+          .slice(((filename.lastIndexOf(".") - 1) >>> 0) + 2)
+          .toLowerCase();
+      }
+      function readFileAsDataURL(file) {
+        /* ... no change ... */
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = (error) => reject(error);
+          reader.readAsDataURL(file);
+        });
+      }
+      function getFileSignature(file) {
+        /* ... no change ... */
+        return `${file.name}|${file.size}|${file.lastModified}`;
+      }
+
+      // --- Core Logic ---
+
+      function clearDownloadLink() {
+        /* ... no change ... */
+        const existingLink = downloadLinkPlaceholder.querySelector("a");
+        if (existingLink && existingLink.href.startsWith("blob:")) {
+          console.log("Revoking old blob URL:", existingLink.href);
+          URL.revokeObjectURL(existingLink.href);
+        }
+        downloadLinkPlaceholder.innerHTML = "";
+      }
+
+      function removeImage(idToRemove) {
+        /* ... no change ... */
+        images = images.filter((imgData) => imgData.id !== idToRemove);
+        updateAllDuplicateFlags();
+        renderGrid();
+      }
+
+      function updateAllDuplicateFlags() {
+        /* ... no change ... */
+        const fileSignatureCounts = new Map();
+        images.forEach((imgData) => {
+          const signature = getFileSignature(imgData.file);
+          fileSignatureCounts.set(
+            signature,
+            (fileSignatureCounts.get(signature) || 0) + 1
+          );
+        });
+        images.forEach((imgData) => {
+          const signature = getFileSignature(imgData.file);
+          imgData.isDuplicate = (fileSignatureCounts.get(signature) || 0) > 1;
+        });
+        console.log(
+          "Updated duplicate flags:",
+          images.map((im) => ({ id: im.id, isDuplicate: im.isDuplicate }))
+        );
+      }
+
+      /**
+       * Renders the image grid based on current state and filters.
+       * Handles SortableJS instance lifecycle.
+       */
+      function renderGrid() {
+        // 1. Destroy existing Sortable instance *before* clearing DOM
+        if (sortableInstance) {
+          try {
+            sortableInstance.destroy();
+            console.log("Destroyed previous Sortable instance.");
+          } catch (e) {
+            console.error("Error destroying Sortable instance:", e);
+          }
+          sortableInstance = null; // Ensure it's nullified
+        }
+
+        // 2. Clear the grid
+        imageGrid.innerHTML = "";
+
+        // 3. Filter images based on the toggle state
+        const imagesToDisplay = hideImagesWithoutPrompt
+          ? images.filter(
+              (imgData) => imgData.prompt && imgData.prompt.trim() !== ""
+            )
+          : images; // If toggle is off, use all images
+
+        // 4. Loop through imagesToDisplay and create/append elements
+        imagesToDisplay.forEach((imgData) => {
+          // Find the original index in the main 'images' array for correct numbering
+          const originalIndex = images.findIndex(
+            (img) => img.id === imgData.id
+          );
+
+          const div = document.createElement("div");
+          div.classList.add("image-item");
+          if (useSquareGrid) {
+            div.classList.add("aspect-square");
+          }
+          div.dataset.id = imgData.id; // Use the unique ID for sorting reference
+
+          const imgElement = document.createElement("img");
+          imgElement.src = imgData.dataURL;
+          imgElement.alt = `Image ${originalIndex + 1}`; // Use original index for alt text
+          imgElement.loading = "lazy";
+
+          const overlayContainer = document.createElement("div");
+          overlayContainer.classList.add(
+            "image-overlay-bottom",
+            "pointer-events-auto",
+            "flex",
+            "items-center",
+            "gap-1"
+          );
+
+          // Index Number (using original index)
+          const indexSpan = document.createElement("span");
+          indexSpan.classList.add("image-index");
+          indexSpan.textContent = originalIndex + 1; // Display original index
+          if (imgData.isDuplicate) {
+            indexSpan.classList.add("image-index-duplicate");
+          }
+          overlayContainer.appendChild(indexSpan);
+
+          // Duplicate Tag
+          if (imgData.isDuplicate) {
+            const duplicateSpan = document.createElement("span");
+            duplicateSpan.classList.add("duplicate-tag");
+            duplicateSpan.textContent = "Duplicated";
+            overlayContainer.appendChild(duplicateSpan);
+          }
+
+          // Prompt Button
+          const promptBtn = document.createElement("button");
+          promptBtn.classList.add("prompt-button");
+          promptBtn.setAttribute(
+            "aria-label",
+            `Edit prompt for image ${originalIndex + 1}`
+          );
+          promptBtn.dataset.imageId = imgData.id;
+          promptBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6"> <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /> </svg>`;
+          if (imgData.prompt && imgData.prompt.trim() !== "") {
+            promptBtn.classList.add("has-prompt");
+          }
+          promptBtn.addEventListener("click", (event) => {
+            event.stopPropagation();
+            openPromptModal(imgData.id);
+          });
+          overlayContainer.appendChild(promptBtn);
+
+          const removeBtn = document.createElement("button");
+          removeBtn.classList.add("remove-button");
+          removeBtn.setAttribute(
+            "aria-label",
+            `Remove image ${originalIndex + 1}`
+          );
+          removeBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>`;
+          removeBtn.addEventListener("click", (event) => {
+            event.stopPropagation();
+            removeImage(imgData.id);
+          });
+
+          div.appendChild(imgElement);
+          div.appendChild(overlayContainer);
+          div.appendChild(removeBtn);
+          imageGrid.appendChild(div);
+        }); // End loop
+
+        // 5. Update counts and button states
+        const count = images.length; // Use total count for enabling features
+        imageCountSpan.textContent = count;
+        generateButton.disabled = count === 0;
+        hideEmptyPromptToggle.disabled = count === 0; // Enable filter toggle if images exist
+        dropInstructions.classList.toggle("hidden", count > 0);
+
+        // 6. Initialize NEW Sortable instance *after* adding items to DOM
+        const itemsToSort = imageGrid.querySelectorAll(".image-item");
+        if (itemsToSort.length > 0) {
+          console.log(
+            "Initializing Sortable on",
+            itemsToSort.length,
+            "displayed items."
+          );
+          sortableInstance = new Sortable(imageGrid, {
+            animation: 150,
+            ghostClass: "sortable-ghost",
+            chosenClass: "sortable-chosen",
+            dragClass: "sortable-drag",
+            filter: ".remove-button, .prompt-button", // Prevent drag on buttons
+            preventOnFilter: true,
+            onEnd: (evt) => {
+              // --- Logic to update the main 'images' array based on visual reorder ---
+              const movedItemId = parseInt(evt.item.dataset.id);
+              const currentDisplayedItems = Array.from(imageGrid.children); // Current DOM order
+              const newVisualIndex = currentDisplayedItems.findIndex(
+                (item) => parseInt(item.dataset.id) === movedItemId
+              );
+
+              // Find the item in the main array and remove it
+              const originalItemIndex = images.findIndex(
+                (img) => img.id === movedItemId
+              );
+              if (originalItemIndex === -1) {
+                console.error("Moved item not found in main array!");
+                return;
+              }
+              const [movedItemData] = images.splice(originalItemIndex, 1);
+
+              // Determine where to re-insert it in the main 'images' array
+              let targetIndexInFullArray;
+              if (newVisualIndex === 0) {
+                // Dropped at the visual beginning
+                if (hideImagesWithoutPrompt) {
+                  // Find the index of the first *currently visible* item in the *full* array
+                  const firstVisibleItemId = parseInt(
+                    currentDisplayedItems[0].dataset.id
+                  );
+                  targetIndexInFullArray = images.findIndex(
+                    (img) => img.id === firstVisibleItemId
+                  );
+                  // If the first visible wasn't found (shouldn't happen if list not empty), default to 0
+                  if (targetIndexInFullArray === -1) targetIndexInFullArray = 0;
+                } else {
+                  targetIndexInFullArray = 0; // Dropped at absolute beginning
+                }
+              } else {
+                // Dropped after another visible item
+                const elementBefore = currentDisplayedItems[newVisualIndex - 1];
+                const idBefore = parseInt(elementBefore.dataset.id);
+                // Find the item it was dropped after in the *full* array
+                const indexBeforeInFullArray = images.findIndex(
+                  (img) => img.id === idBefore
+                );
+                if (indexBeforeInFullArray === -1) {
+                  console.error("Item before moved item not found!");
+                  return;
+                }
+                targetIndexInFullArray = indexBeforeInFullArray + 1;
+              }
+
+              // Insert the moved item at the calculated target index
+              images.splice(targetIndexInFullArray, 0, movedItemData);
+              console.log(
+                `Moved item ID ${movedItemId} to index ${targetIndexInFullArray} in main array.`
+              );
+
+              renderGrid(); // Re-render the grid (applies filter, updates numbering)
+            },
+          });
+        } else {
+          console.log("No items to sort, Sortable not initialized.");
+          sortableInstance = null; // Ensure null if no items displayed
+        }
+
+        // 7. Clear download link
+        clearDownloadLink();
+      }
+
+      // initializeSortable function removed - logic integrated into renderGrid
+
+      async function processFiles(fileList) {
+        /* ... no change ... */
+        const initialFileCount = fileList.length;
+        let rejectedCount = 0;
+
+        const validImageFiles = Array.from(fileList).filter((file) => {
+          const extension = getFileExtension(file.name);
+          const isValid =
+            file.type.startsWith("image/") &&
+            ACCEPTED_FILE_EXTENSIONS.includes(extension);
+          if (!isValid) {
+            rejectedCount++;
+          }
+          return isValid;
+        });
+
+        if (validImageFiles.length === 0 && initialFileCount > 0) {
+          showMessage(
+            `No valid files found (only ${ACCEPTED_FILE_EXTENSIONS.join(
+              ", "
+            )} allowed).`
+          );
+          return;
+        }
+        if (rejectedCount > 0) {
+          showMessage(
+            `Ignoring ${rejectedCount} files with unsupported extensions or types.`
+          );
+        }
+
+        const originalInstructionHTML = dropInstructions.innerHTML;
+        const processingMessage =
+          images.length > 0
+            ? "Processing..."
+            : `<p class="text-gray-600 p-4">Processing images...</p>`;
+        if (images.length === 0) dropInstructions.innerHTML = processingMessage;
+        else showMessage("Processing new images...", "success");
+
+        const newImageDataObjects = [];
+        try {
+          const readPromises = validImageFiles.map((file) =>
+            readFileAsDataURL(file)
+              .then((dataURL) => ({
+                id: nextId++,
+                file: file,
+                dataURL: dataURL,
+                isDuplicate: false,
+                prompt: "",
+              }))
+              .catch((error) => {
+                console.error("Error reading file:", file.name, error);
+                showMessage(`Error reading file: ${file.name}`);
+                return null;
+              })
+          );
+          const results = await Promise.all(readPromises);
+          newImageDataObjects.push(
+            ...results.filter((result) => result !== null)
+          );
+        } catch (error) {
+          console.error("Error processing files:", error);
+          showMessage("An unexpected error occurred while processing files.");
+        }
+
+        images.push(...newImageDataObjects);
+        updateAllDuplicateFlags();
+        renderGrid();
+
+        if (images.length === 0 && initialFileCount === 0) {
+          dropInstructions.innerHTML = originalInstructionHTML;
+          dropInstructions.classList.remove("hidden");
+        }
+      }
+
+      // --- Modal Functions ---
+      function openPromptModal(imageId) {
+        /* ... no change ... */
+        const imageIndex = images.findIndex((img) => img.id === imageId);
+        if (imageIndex === -1) return;
+        const imgData = images[imageIndex];
+        currentEditingImageId = imageId;
+        modalTitle.textContent = `Edit Prompt for Image ${imageIndex + 1}`;
+        promptTextarea.value = imgData.prompt || "";
+        modalOverlay.classList.remove("hidden");
+        promptModal.classList.remove("hidden");
+        promptTextarea.focus();
+      }
+      function closePromptModal() {
+        /* ... no change ... */
+        modalOverlay.classList.add("hidden");
+        promptModal.classList.add("hidden");
+        promptTextarea.value = "";
+        currentEditingImageId = null;
+      }
+      function savePrompt() {
+        /* ... no change ... */
+        if (currentEditingImageId === null) return;
+        const imageIndex = images.findIndex(
+          (img) => img.id === currentEditingImageId
+        );
+        if (imageIndex === -1) return;
+        const newPrompt = promptTextarea.value.trim();
+        images[imageIndex].prompt = newPrompt;
+        console.log(
+          `Saved prompt for image ID ${currentEditingImageId}: "${newPrompt}"`
+        );
+        closePromptModal();
+        renderGrid();
+      }
+
+      // --- Event Listeners ---
+
+      // 1. File Input Change
+      fileInput.addEventListener("change", (event) => {
+        /* ... no change ... */
+        processFiles(event.target.files);
+        event.target.value = null;
+      });
+
+      // 2. Click on Instructions Area
+      dropInstructions.addEventListener("click", () => {
+        /* ... no change ... */
+        fileInput.click();
+      });
+
+      // 3. Body Drag/Drop Listeners
+      body.addEventListener("dragover", (event) => {
+        /* ... no change ... */
+        event.preventDefault();
+        event.stopPropagation();
+        const isOverGrid = imageGrid.contains(event.target);
+        const isOverFooter = document
+          .querySelector("footer")
+          .contains(event.target);
+        const isOverInstructions = dropInstructions.contains(event.target);
+        const isDirectlyOverBody = event.target === body;
+        if (
+          (isDirectlyOverBody || isOverInstructions) &&
+          !isOverGrid &&
+          !isOverFooter
+        ) {
+          body.classList.add("drop-zone-active");
+        } else {
+          body.classList.remove("drop-zone-active");
+        }
+        if (!isOverFooter) {
+          footerDropZone.classList.remove("footer-drop-zone-active");
+        }
+      });
+      body.addEventListener("dragleave", (event) => {
+        /* ... no change ... */
+        event.preventDefault();
+        event.stopPropagation();
+        if (
+          event.relatedTarget === null ||
+          !body.contains(event.relatedTarget)
+        ) {
+          body.classList.remove("drop-zone-active");
+        }
+        if (
+          event.clientX <= 0 ||
+          event.clientY <= 0 ||
+          event.clientX >= window.innerWidth ||
+          event.clientY >= window.innerHeight
+        ) {
+          body.classList.remove("drop-zone-active");
+        }
+      });
+      body.addEventListener("drop", (event) => {
+        /* ... no change ... */
+        event.preventDefault();
+        event.stopPropagation();
+        body.classList.remove("drop-zone-active");
+        const isOverGrid = imageGrid.contains(event.target);
+        const isOverFooter = document
+          .querySelector("footer")
+          .contains(event.target);
+        if (
+          !isOverGrid &&
+          !isOverFooter &&
+          (dropInstructions.contains(event.target) || event.target === body)
+        ) {
+          const files = event.dataTransfer.files;
+          if (files && files.length > 0) {
+            processFiles(files);
+          }
+        }
+      });
+
+      // 4. Footer Drop Zone Listeners
+      footerDropZone.addEventListener("dragover", (event) => {
+        /* ... no change ... */
+        event.preventDefault();
+        event.stopPropagation();
+        footerDropZone.classList.add("footer-drop-zone-active");
+        body.classList.remove("drop-zone-active");
+      });
+      footerDropZone.addEventListener("dragleave", (event) => {
+        /* ... no change ... */
+        event.preventDefault();
+        event.stopPropagation();
+        const rect = footerDropZone.getBoundingClientRect();
+        if (
+          event.clientX < rect.left ||
+          event.clientX >= rect.right ||
+          event.clientY < rect.top ||
+          event.clientY >= rect.bottom
+        ) {
+          footerDropZone.classList.remove("footer-drop-zone-active");
+        }
+      });
+      footerDropZone.addEventListener("drop", (event) => {
+        /* ... no change ... */
+        event.preventDefault();
+        event.stopPropagation();
+        footerDropZone.classList.remove("footer-drop-zone-active");
+        const files = event.dataTransfer.files;
+        if (files && files.length > 0) {
+          processFiles(files);
+        }
+      });
+
+      // 5. Generate Button Click (Includes manifest.json)
+      generateButton.addEventListener("click", async () => {
+        /* ... no change ... */
+        if (images.length === 0) {
+          showMessage("No images to generate ZIP.");
+          return;
+        }
+        generateButton.disabled = true;
+        generateButton.textContent = "Generating...";
+        clearDownloadLink();
+        try {
+          const zip = new JSZip();
+          const manifestData = [];
+          images.forEach((imgData, index) => {
+            const extension = getFileExtension(imgData.file.name);
+            const paddedIndex = String(index + 1).padStart(
+              FILENAME_PADDING,
+              "0"
+            );
+            const filename = `${paddedIndex}${
+              extension ? "." + extension : ""
+            }`;
+            zip.file(filename, imgData.file);
+            manifestData.push({
+              filename: filename,
+              prompt: imgData.prompt || "",
+            });
+          });
+          const manifestJsonString = JSON.stringify(manifestData, null, 2);
+          zip.file("manifest.json", manifestJsonString);
+          console.log("Added manifest.json to ZIP");
+          const blob = await zip.generateAsync({
+            type: "blob",
+            compression: "DEFLATE",
+            compressionOptions: { level: 6 },
+          });
+          if (blob.size === 0) {
+            throw new Error("Generated ZIP blob is empty.");
+          }
+          const link = document.createElement("a");
+          const url = URL.createObjectURL(blob);
+          console.log("Created Object URL for link:", url);
+          link.href = url;
+          link.download = "images_and_prompts.zip";
+          link.textContent = "Download ZIP";
+          link.classList.add("download-link-button");
+          link.addEventListener("click", (e) => {
+            console.log(
+              "Download link clicked. Scheduling cleanup for URL:",
+              url
+            );
+            setTimeout(() => {
+              console.log("Revoking Object URL:", url);
+              URL.revokeObjectURL(url);
+            }, 150);
+          });
+          downloadLinkPlaceholder.appendChild(link);
+          showMessage(
+            "ZIP generated successfully! Click the link to download.",
+            "success"
+          );
+        } catch (error) {
+          console.error("Error creating ZIP file or download link:", error);
+          showMessage(`Error creating ZIP: ${error.message}`, "error");
+          clearDownloadLink();
+        } finally {
+          generateButton.disabled = images.length === 0;
+          generateButton.textContent = "Generate ZIP";
+        }
+      });
+
+      // 6. Aspect Ratio Toggle Change
+      aspectToggle.addEventListener("change", (event) => {
+        /* ... no change ... */
+        useSquareGrid = event.target.checked;
+        renderGrid();
+      });
+
+      // 7. Filter Toggle Change
+      hideEmptyPromptToggle.addEventListener("change", (event) => {
+        hideImagesWithoutPrompt = event.target.checked;
+        console.log("Filter toggle changed:", hideImagesWithoutPrompt);
+        renderGrid(); // Re-render with the filter applied/removed
+      });
+
+      // 8. Modal Event Listeners
+      savePromptButton.addEventListener("click", savePrompt);
+      cancelPromptButton.addEventListener("click", closePromptModal);
+      modalOverlay.addEventListener("click", closePromptModal);
+
+      // --- Initial Render ---
+      aspectToggle.checked = useSquareGrid;
+      hideEmptyPromptToggle.checked = hideImagesWithoutPrompt; // Set initial state
+      renderGrid(); // Initial render ensures button state is correct
+    </script>
+  </body>
+</html>
