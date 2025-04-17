@@ -11,7 +11,7 @@ This is a single-page web application designed to help creators organize sequenc
 - **Image Upload:**
   - Upload multiple images at once by clicking the initial instruction area or the dedicated drop zone in the footer.
   - Supports drag-and-drop of image files onto the page (initial area or footer drop zone).
-  - Accepts only `.jpg`, `.jpeg`, and `.png` file types. Other file types are ignored.
+  - Accepts only `.jpg`, `.jpeg`, and `.png` file types. Other file types are ignored (it can be configured by changing ACCEPTED_FILE_EXTENSIONS).
 - **Grid Display & Sorting:**
   - Uploaded images are displayed in a responsive grid.
   - Images can be easily reordered using drag-and-drop.
