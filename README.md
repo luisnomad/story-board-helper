@@ -1,5 +1,7 @@
 # AI Storyboard Image Sorter & Prompt Editor
 
+![Screenshot of the application](screenshot.jpg)
+
 ## Purpose
 
 This is a single-page web application designed to help creators organize sequences of reference images and their corresponding text prompts, primarily for storyboarding AI video generation projects. It allows users to upload images, visually sort them into the desired order, add prompts to each image, identify duplicates, and finally download the ordered images along with a manifest file containing the prompts.
